@@ -13,19 +13,22 @@
 #pragma once
 
 #include "ai_gateway_core/core/result.h"
-#include <string>
 #include <ctime>
+#include <memory>
+#include <string>
 
 namespace ai_gateway_core {
+
+class Storage;
 
 /**
  * @brief 用户账户当前状态。
  */
 enum class UserStatus {
-    Active,
-    Disabled,
-    QuotaExceeded,
-    Expired
+    Active,         // 用户正常可用，可以发起请求。
+    Disabled,       // 用户已被禁用，不能继续使用网关服务。
+    QuotaExceeded,  // 用户额度已用尽，需要充值、重置额度或等待额度恢复。
+    Expired         // 用户账号已过期，不能继续发起请求。
 };
 
 /**
@@ -80,6 +83,51 @@ public:
      * @return 成功时表示扣减已持久化；失败时返回余额不足或存储错误。
      */
     virtual Status deductQuota(const std::string& user_id, double amount) = 0;
+};
+
+/**
+ * @brief UserManager 的默认实现。
+ *
+ * 设计意图：
+ * - 负责用户维度的请求可用性校验和额度扣减。
+ * - 把“认证后还能不能继续请求”的业务规则集中在这一层。
+ * - 具体账户数据仍然存放在 Storage 中。
+ */
+class DefaultUserManager : public UserManager {
+public:
+    /**
+     * @brief 创建一个默认用户管理器。
+     * @param storage 用于读取和保存用户账户的存储实现。
+     */
+    explicit DefaultUserManager(std::shared_ptr<Storage> storage);
+
+    /// @brief 获取指定用户账户。
+    Result<UserAccount> getUser(const std::string& user_id) override;
+
+    /// @brief 检查指定用户当前是否允许发起请求。
+    Status ensureUserCanRequest(const std::string& user_id) override;
+
+    /// @brief 从用户账户扣减额度或余额。
+    Status deductQuota(const std::string& user_id, double amount) override;
+
+private:
+    /**
+     * @brief 校验扣费参数是否合法。
+     * @param user_id 需要扣费的用户标识。
+     * @param amount 计划扣减的金额或额度。
+     * @return 成功时表示参数可继续处理；失败时返回 InvalidArgument。
+     */
+    Status validateQuotaArguments(const std::string& user_id, double amount) const;
+
+    /**
+     * @brief 校验用户当前状态是否允许请求。
+     * @param user 需要检查的用户账户对象。
+     * @return 成功时表示用户状态允许请求；失败时返回禁用、过期或额度错误。
+     */
+    Status validateUserStatus(const UserAccount& user) const;
+
+    /// @brief 用于读取和更新用户账户的存储实现。
+    std::shared_ptr<Storage> storage_;
 };
 
 }

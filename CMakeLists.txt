@@ -33,3 +33,15 @@ add_library(ai_gateway_core
 target_include_directories(ai_gateway_core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
 )
+
+enable_testing()
+
+add_executable(result_helpers_test
+    tests/result_helpers_test.cpp
+)
+
+target_link_libraries(result_helpers_test PRIVATE
+    ai_gateway_core
+)
+
+add_test(NAME result_helpers_test COMMAND result_helpers_test)

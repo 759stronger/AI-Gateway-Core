@@ -14,11 +14,16 @@
 
 #include "ai_gateway_core/core/result.h"
 #include "ai_gateway_core/upstream/upstream_account.h"
-#include <string>
-#include <vector>
 #include <ctime>
+#include <memory>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 namespace ai_gateway_core {
+
+class ProviderManager;
+class UpstreamPool;
 
 /**
  * @brief 单个上游账号的健康状态快照。
@@ -72,6 +77,47 @@ public:
      * @return 成功时返回健康快照列表；失败时返回存储错误。
      */
     virtual Result<std::vector<HealthSnapshot>> listSnapshots() = 0;
+};
+
+/**
+ * @brief 默认健康检查实现。
+ *
+ * 设计意图：
+ * - 统一驱动所有上游账号的健康探测流程。
+ * - 保存最近一次健康快照，供路由和管理后台复用。
+ */
+class BasicHealthChecker : public HealthChecker {
+public:
+    /**
+     * @brief 创建默认健康检查器。
+     * @param upstream_pool 提供上游账号列表和状态更新能力。
+     * @param provider_manager 提供对应供应商实现，用于实际探测。
+     */
+    BasicHealthChecker(std::shared_ptr<UpstreamPool> upstream_pool,
+                       std::shared_ptr<ProviderManager> provider_manager);
+
+    /// @brief 对单个账号执行健康检查。
+    Status checkAccount(const UpstreamAccount& account) override;
+    /// @brief 对所有账号执行健康检查。
+    Status checkAll() override;
+    /// @brief 读取指定账号的健康快照。
+    Result<HealthSnapshot> getSnapshot(const std::string& upstream_account_id) override;
+    /// @brief 列出所有健康快照。
+    Result<std::vector<HealthSnapshot>> listSnapshots() override;
+
+private:
+    /// @brief 组装一份健康快照对象。
+    HealthSnapshot makeSnapshot(const UpstreamAccount& account,
+                                UpstreamStatus status,
+                                int latency_ms,
+                                const std::string& last_error) const;
+
+    /// @brief 上游账号池依赖。
+    std::shared_ptr<UpstreamPool> upstream_pool_;
+    /// @brief Provider 注册表依赖。
+    std::shared_ptr<ProviderManager> provider_manager_;
+    /// @brief 最近一次检查结果快照表，key 为 upstream_account_id。
+    std::unordered_map<std::string, HealthSnapshot> snapshots_;
 };
 
 }

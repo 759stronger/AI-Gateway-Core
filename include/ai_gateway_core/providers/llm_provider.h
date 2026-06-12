@@ -16,8 +16,8 @@
 #include "ai_gateway_core/core/result.h"
 #include "ai_gateway_core/core/types.h"
 #include "ai_gateway_core/upstream/upstream_account.h"
-#include <functional>
 #include <string>
+#include <functional>
 #include <vector>
 
 namespace ai_gateway_core {
@@ -89,6 +89,44 @@ public:
      * @return 成功时表示流式请求正常结束；失败时返回发送、网络或中途解析错误。
      */
     virtual Status sendStreamChat(const ProviderChatRequest& request, StreamCallback callback) = 0;
+};
+
+/**
+ * @brief 用于开发和教学的模拟大模型供应商。
+ *
+ * 设计意图：
+ * - 不依赖真实上游网络，就能让路由、协议适配和服务链路跑起来。
+ * - 适合第一阶段验证网关逻辑，也适合单元测试。
+ */
+class MockLLMProvider : public LLMProvider {
+public:
+    /**
+     * @brief 创建一个模拟 Provider。
+     * @param provider_name 这个模拟供应商对外暴露的名称。
+     */
+    explicit MockLLMProvider(std::string provider_name = "mock");
+
+    /// @brief 返回模拟供应商名称。
+    std::string providerName() const override;
+    /// @brief 返回模拟供应商支持的能力列表。
+    std::vector<Capability> capabilities() const override;
+    /// @brief 模拟对上游账号执行健康检查。
+    Status healthCheck(const UpstreamAccount& account) override;
+    /// @brief 生成一条完整的模拟聊天响应。
+    Result<ChatCompletionResponse> sendChat(const ProviderChatRequest& request) override;
+    /// @brief 按流式回调方式生成模拟聊天片段。
+    Status sendStreamChat(const ProviderChatRequest& request, StreamCallback callback) override;
+
+private:
+    /// @brief 构造模拟聊天响应对象。
+    ChatCompletionResponse buildResponse(const ProviderChatRequest& request,
+                                         const std::string& content,
+                                         bool stream_chunk) const;
+    /// @brief 提取请求里最后一条用户消息，作为模拟回复素材。
+    std::string extractLastUserMessage(const ProviderChatRequest& request) const;
+
+    /// @brief 模拟供应商的对外名称。
+    std::string provider_name_;
 };
 
 }

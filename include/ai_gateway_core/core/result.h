@@ -14,6 +14,7 @@
 #pragma once
 
 #include <string>
+#include <utility>
 
 namespace ai_gateway_core {
 
@@ -21,21 +22,21 @@ namespace ai_gateway_core {
  * @brief 网关内部通用错误码。
  */
 enum class ErrorCode {
-    Ok,
-    InvalidArgument,
-    Unauthorized,
-    Forbidden,
-    QuotaExceeded,
-    RateLimited,
-    NotFound,
-    NotInitialized,
-    ProviderUnavailable,
-    UpstreamUnavailable,
-    NetworkError,
-    Timeout,
-    ResponseParseError,
-    StorageError,
-    InternalError
+    Ok,                   // 操作成功，没有错误。
+    InvalidArgument,      // 参数非法，例如必填字段为空、格式错误或取值超出范围。
+    Unauthorized,         // 未认证，例如缺少 API Key、Token 无效或 Token 已过期。
+    Forbidden,            // 已认证但无权限，例如用户没有访问某模型或管理接口的权限。
+    QuotaExceeded,        // 用户、账号或组织额度已经用尽。
+    RateLimited,          // 请求触发限流，需要等待后重试。
+    NotFound,             // 请求的用户、模型、上游账号、记录等资源不存在。
+    NotInitialized,       // 组件尚未初始化，例如服务、存储或配置未准备好。
+    ProviderUnavailable,  // 模型供应商整体不可用，例如供应商服务宕机或未注册。
+    UpstreamUnavailable,  // 具体上游账号或端点不可用，例如禁用、不健康或并发已满。
+    NetworkError,         // 网络错误，例如连接失败、DNS 失败或 TLS 失败。
+    Timeout,              // 请求超时，例如调用上游供应商超过时间限制。
+    ResponseParseError,   // 响应解析失败，例如供应商返回 JSON 格式不符合预期。
+    StorageError,         // 存储错误，例如数据库连接、查询或写入失败。
+    InternalError         // 内部错误，用于无法归类的程序异常或逻辑错误。
 };
 
 /**
@@ -79,5 +80,60 @@ struct Status {
     bool ok = false;
     Error error;
 };
+
+/**
+ * @brief 将错误码转换为稳定的英文标识字符串。
+ * @param code 需要转换的错误码。
+ * @return 对应错误码名称，便于日志、调试和协议错误映射。
+ */
+const char* toString(ErrorCode code);
+
+/**
+ * @brief 创建一个成功的带值结果。
+ *
+ * 模板参数说明：
+ * - T：成功结果中携带的值类型。
+ *
+ * @param value 成功时返回给调用方的业务值。
+ * @return ok 为 true 的 Result<T>。
+ */
+template <typename T>
+Result<T> successResult(T value) {
+    Result<T> result;
+    result.ok = true;
+    result.value = std::move(value);
+    result.error = {ErrorCode::Ok, {}};
+    return result;
+}
+
+/**
+ * @brief 创建一个失败的带值结果。
+ *
+ * 模板参数说明：
+ * - T：失败结果原本期望携带的业务值类型。
+ *
+ * @param error 失败原因，包含错误码和错误说明。
+ * @return ok 为 false 的 Result<T>。
+ */
+template <typename T>
+Result<T> failureResult(Error error) {
+    Result<T> result;
+    result.ok = false;
+    result.error = std::move(error);
+    return result;
+}
+
+/**
+ * @brief 创建一个成功状态。
+ * @return ok 为 true 的 Status。
+ */
+Status successStatus();
+
+/**
+ * @brief 创建一个失败状态。
+ * @param error 失败原因，包含错误码和错误说明。
+ * @return ok 为 false 的 Status。
+ */
+Status failureStatus(Error error);
 
 }

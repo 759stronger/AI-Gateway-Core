@@ -14,7 +14,10 @@
 
 #include "ai_gateway_core/core/result.h"
 #include "ai_gateway_core/core/types.h"
+#include <ctime>
+#include <mutex>
 #include <string>
+#include <unordered_map>
 
 namespace ai_gateway_core {
 
@@ -75,6 +78,67 @@ public:
      * @return 成功时表示限流计数已消费；失败时返回并发冲突、配额不足或后端错误。
      */
     virtual Status consume(const GatewayContext& context, const std::string& upstream_account_id) = 0;
+};
+
+/**
+ * @brief 一个简单的内存版限流器实现。
+ *
+ * 设计意图：
+ * - 用固定时间窗口计数快速实现最小可用限流能力。
+ * - 先把限流接口接进主链路，后续再替换成 Redis 或更复杂算法。
+ */
+class InMemoryRateLimiter : public RateLimiter {
+public:
+    /// @brief 检查用户维度限流。
+    Result<LimitDecision> checkUserLimit(const GatewayContext& context) override;
+    /// @brief 检查 API Key 维度限流。
+    Result<LimitDecision> checkApiKeyLimit(const GatewayContext& context) override;
+    /// @brief 检查公共模型维度限流。
+    Result<LimitDecision> checkModelLimit(const GatewayContext& context) override;
+    /// @brief 检查上游账号维度限流。
+    Result<LimitDecision> checkUpstreamLimit(const std::string& upstream_account_id, Capability capability) override;
+    /// @brief 消费已经通过的限流计数。
+    Status consume(const GatewayContext& context, const std::string& upstream_account_id) override;
+
+    /// @brief 设置用户维度每分钟请求上限。
+    void setUserLimitPerMinute(int limit);
+    /// @brief 设置 API Key 维度每分钟请求上限。
+    void setApiKeyLimitPerMinute(int limit);
+    /// @brief 设置公共模型维度每分钟请求上限。
+    void setModelLimitPerMinute(int limit);
+    /// @brief 设置上游账号维度每分钟请求上限。
+    void setUpstreamLimitPerMinute(int limit);
+
+private:
+    /**
+     * @brief 单个固定窗口的计数状态。
+     * - used：当前窗口已消费次数。
+     * - window_started_at：当前窗口起始时间。
+     */
+    struct CounterWindow {
+        int used = 0;
+        std::time_t window_started_at = 0;
+    };
+
+    /// @brief 对某个维度键执行限流检查。
+    Result<LimitDecision> checkLimit(const std::string& key, int limit);
+    /// @brief 对某个维度键实际消费一次计数。
+    Status consumeLimit(const std::string& key);
+    /// @brief 获取当前时间戳。
+    std::time_t now() const;
+
+    /// @brief 用户维度限流阈值。
+    int user_limit_per_minute_ = 0;
+    /// @brief API Key 维度限流阈值。
+    int api_key_limit_per_minute_ = 0;
+    /// @brief 公共模型维度限流阈值。
+    int model_limit_per_minute_ = 0;
+    /// @brief 上游账号维度限流阈值。
+    int upstream_limit_per_minute_ = 0;
+    /// @brief 所有限流计数窗口，key 为维度组合键。
+    std::unordered_map<std::string, CounterWindow> counters_;
+    /// @brief 保护 counters_ 的互斥锁。
+    std::mutex mutex_;
 };
 
 }

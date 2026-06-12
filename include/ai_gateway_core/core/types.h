@@ -23,23 +23,23 @@ namespace ai_gateway_core {
  * @brief 模型或上游账号支持的能力类型。
  */
 enum class Capability {
-    ChatCompletion,
-    ImageGeneration,
-    Embedding,
-    AudioTranscription,
-    TextToSpeech,
-    ToolCalling,
-    Rerank
+    ChatCompletion,      // 聊天补全能力，用于普通对话、问答和多轮聊天请求。
+    ImageGeneration,     // 图片生成能力，用于根据文字提示词生成图片。
+    Embedding,           // 文本向量化能力，用于语义搜索、相似度匹配和 RAG 检索。
+    AudioTranscription,  // 语音转文字能力，用于把音频内容识别成文本。
+    TextToSpeech,        // 文字转语音能力，用于把文本内容合成为音频。
+    ToolCalling,         // 工具调用能力，用于让模型决定是否调用外部函数或 API。
+    Rerank               // 重排序能力，用于对搜索结果、候选答案或文档列表重新排序。
 };
 
 /**
  * @brief 聊天消息在对话中的发送方角色。
  */
 enum class Role {
-    System,
-    User,
-    Assistant,
-    Tool
+    System,     // 系统角色，用于设置模型行为规则、身份和全局指令。
+    User,       // 用户角色，表示终端用户输入的问题或请求内容。
+    Assistant,  // 助手角色，表示模型生成的回复内容。
+    Tool        // 工具角色，表示外部工具或函数调用返回给模型的结果。
 };
 
 /**
@@ -141,5 +141,4 @@ struct GatewayContext {
     Capability capability = Capability::ChatCompletion;
     bool stream = false;
 };
-
 }

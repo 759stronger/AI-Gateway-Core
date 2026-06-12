@@ -13,11 +13,17 @@
 #pragma once
 
 #include "ai_gateway_core/core/result.h"
+#include "ai_gateway_core/routing/model_mapping.h"
 #include "ai_gateway_core/upstream/upstream_account.h"
+#include <memory>
+#include <mutex>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace ai_gateway_core {
+
+class Storage;
 
 /**
  * @brief 上游账号池接口。
@@ -48,6 +54,13 @@ public:
     virtual Status disableAccount(const std::string& account_id) = 0;
 
     /**
+     * @brief 从账号池中移除指定账号。
+     * @param account_id 需要移除的上游账号唯一标识。
+     * @return 成功时表示账号已被删除；失败时返回不存在或存储错误。
+     */
+    virtual Status removeAccount(const std::string& account_id) = 0;
+
+    /**
      * @brief 获取指定上游账号。
      * @param account_id 需要查询的上游账号唯一标识。
      * @return 成功时返回账号信息；失败时返回不存在或存储错误。
@@ -61,12 +74,11 @@ public:
     virtual Result<std::vector<UpstreamAccount>> listAccounts() = 0;
 
     /**
-     * @brief 根据公共模型和能力筛选可用候选账号。
-     * @param public_model_name 客户端请求的公共模型名。
-     * @param capability 本次请求需要的模型能力。
+     * @brief 根据模型映射筛选可用候选账号。
+     * @param mapping 已命中的模型映射，包含供应商、真实模型名和能力信息。
      * @return 成功时返回满足模型、能力、启用状态和健康状态的候选账号列表。
      */
-    virtual Result<std::vector<UpstreamAccount>> findCandidates(const std::string& public_model_name, Capability capability) = 0;
+    virtual Result<std::vector<UpstreamAccount>> findCandidates(const ModelMapping& mapping) = 0;
 
     /**
      * @brief 标记指定账号一次请求成功。
@@ -97,6 +109,83 @@ public:
      * @return 成功时表示并发计数已减少；失败时返回不存在或状态不一致错误。
      */
     virtual Status releaseConcurrency(const std::string& account_id) = 0;
+};
+
+/**
+ * @brief UpstreamPool 的内存版实现。
+ *
+ * 设计意图：
+ * - 统一管理上游账号的启用状态、并发占用和简单统计信息。
+ * - 先用内存结构支持路由和健康检查流程，后面可替换为持久化实现。
+ */
+class InMemoryUpstreamPool : public UpstreamPool {
+public:
+    /**
+     * @brief 创建一个内存版上游账号池。
+     * @param storage 可选的存储实现；如果提供，则更新账号状态时同步保存。
+     */
+    explicit InMemoryUpstreamPool(std::shared_ptr<Storage> storage = nullptr);
+
+    /// @brief 添加新的上游账号到池中。
+    Status addAccount(const UpstreamAccount& account) override;
+    /// @brief 更新已有上游账号配置。
+    Status updateAccount(const UpstreamAccount& account) override;
+    /// @brief 禁用指定上游账号。
+    Status disableAccount(const std::string& account_id) override;
+    /// @brief 从池中移除指定上游账号。
+    Status removeAccount(const std::string& account_id) override;
+    /// @brief 读取指定上游账号。
+    Result<UpstreamAccount> getAccount(const std::string& account_id) override;
+    /// @brief 列出全部上游账号。
+    Result<std::vector<UpstreamAccount>> listAccounts() override;
+    /// @brief 根据模型映射筛选候选账号。
+    Result<std::vector<UpstreamAccount>> findCandidates(const ModelMapping& mapping) override;
+    /// @brief 记录指定上游账号一次成功调用。
+    Status markSuccess(const std::string& account_id, int latency_ms) override;
+    /// @brief 记录指定上游账号一次失败调用。
+    Status markFailure(const std::string& account_id, const Error& error) override;
+    /// @brief 占用一个并发槽位。
+    Status acquireConcurrency(const std::string& account_id) override;
+    /// @brief 释放一个并发槽位。
+    Status releaseConcurrency(const std::string& account_id) override;
+
+private:
+    /**
+     * @brief 如果配置了存储，则将账号状态同步保存到 Storage。
+     * @param account 需要同步的完整账号对象。
+     * @return 成功时表示已同步或无需同步；失败时返回存储错误。
+     */
+    Status saveToStorageIfPresent(const UpstreamAccount& account);
+
+    /**
+     * @brief 判断账号是否支持某条模型映射所要求的真实模型。
+     * @param account 待检查的上游账号。
+     * @param mapping 命中的模型映射。
+     * @return 支持返回 true，否则返回 false。
+     */
+    bool supportsModel(const UpstreamAccount& account, const ModelMapping& mapping) const;
+
+    /**
+     * @brief 判断账号是否支持指定能力。
+     * @param account 待检查的上游账号。
+     * @param capability 本次请求所需的能力。
+     * @return 支持返回 true，否则返回 false。
+     */
+    bool supportsCapability(const UpstreamAccount& account, Capability capability) const;
+
+    /**
+     * @brief 判断账号当前是否适合参与路由。
+     * @param account 待检查的上游账号。
+     * @return 可路由返回 true，否则返回 false。
+     */
+    bool isRoutable(const UpstreamAccount& account) const;
+
+    /// @brief 可选的存储实现，用于同步账号配置和状态。
+    std::shared_ptr<Storage> storage_;
+    /// @brief 上游账号池主体，key 为 account_id。
+    std::unordered_map<std::string, UpstreamAccount> accounts_;
+    /// @brief 保护账号池状态的互斥锁。
+    mutable std::mutex mutex_;
 };
 
 }

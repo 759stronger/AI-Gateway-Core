@@ -15,7 +15,9 @@
 #include "ai_gateway_core/core/result.h"
 #include "ai_gateway_core/providers/llm_provider.h"
 #include <memory>
+#include <mutex>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace ai_gateway_core {
@@ -46,6 +48,29 @@ public:
      * @return 成功时返回供应商名称列表；失败时返回内部状态错误。
      */
     virtual Result<std::vector<std::string>> listProviderNames() const = 0;
+};
+
+/**
+ * @brief ProviderManager 的默认实现。
+ *
+ * 设计意图：
+ * - 维护 provider_name 到具体 Provider 实例的映射关系。
+ * - 让路由层和网关层不需要了解 Provider 的创建细节。
+ */
+class DefaultProviderManager : public ProviderManager {
+public:
+    /// @brief 注册一个供应商实例。
+    Status registerProvider(std::shared_ptr<LLMProvider> provider) override;
+    /// @brief 按名称获取供应商实例。
+    Result<std::shared_ptr<LLMProvider>> getProvider(const std::string& provider_name) override;
+    /// @brief 列出当前已注册的供应商名称。
+    Result<std::vector<std::string>> listProviderNames() const override;
+
+private:
+    /// @brief 保护 providers_ 映射的互斥锁。
+    mutable std::mutex mutex_;
+    /// @brief 已注册供应商表，key 为 providerName()。
+    std::unordered_map<std::string, std::shared_ptr<LLMProvider>> providers_;
 };
 
 }

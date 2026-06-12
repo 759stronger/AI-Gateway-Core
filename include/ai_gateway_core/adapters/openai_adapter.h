@@ -15,9 +15,9 @@
 
 #include "ai_gateway_core/core/result.h"
 #include "ai_gateway_core/core/types.h"
+#include <map>
 #include <string>
 #include <vector>
-#include <map>
 
 namespace ai_gateway_core {
 
@@ -136,5 +136,36 @@ public:
      * @return 成功时返回可写入 HTTP 响应的错误字符串。
      */
     virtual Result<std::string> buildErrorResponse(const Error& error) = 0;
+};
+
+/**
+ * @brief OpenAI 兼容协议的默认实现。
+ *
+ * 设计意图：
+ * - 把 JSON 协议细节集中在这一层，避免业务模块直接操作外部协议格式。
+ * - 上层拿到的都是内部 DTO，下层输出的都是标准 OpenAI 兼容字符串。
+ */
+class DefaultOpenAIAdapter : public OpenAIAdapter {
+public:
+    /// @brief 解析聊天补全请求体。
+    Result<ChatCompletionRequest> parseChatCompletionRequest(const std::string& body) override;
+    /// @brief 解析图片生成请求体。
+    Result<ImageGenerationRequest> parseImageGenerationRequest(const std::string& body) override;
+    /// @brief 构建完整聊天响应体。
+    Result<std::string> buildChatCompletionResponse(const ChatCompletionResponse& response) override;
+    /// @brief 构建流式聊天响应片段。
+    Result<std::string> buildChatCompletionChunk(const ChatCompletionResponse& response, bool done) override;
+    /// @brief 构建图片生成响应体。
+    Result<std::string> buildImageGenerationResponse(const ImageGenerationResponse& response) override;
+    /// @brief 构建 OpenAI 兼容错误响应体。
+    Result<std::string> buildErrorResponse(const Error& error) override;
+
+private:
+    /// @brief 将协议中的角色文本解析为内部 Role 枚举。
+    Result<Role> parseRole(const std::string& role_text) const;
+    /// @brief 将内部 Role 枚举转换回协议字符串。
+    std::string roleToString(Role role) const;
+    /// @brief 组装聊天响应 JSON 字符串，可同时支持完整和流式场景。
+    std::string makeChatResponseObject(const ChatCompletionResponse& response, bool stream_mode, bool done) const;
 };
 }

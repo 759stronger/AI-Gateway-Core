@@ -23,23 +23,23 @@ namespace ai_gateway_core {
  * @brief 上游账号认证或连接类型。
  */
 enum class UpstreamAccountType {
-    ApiKey,
-    OAuth,
-    Session,
-    LocalEndpoint
+    ApiKey,         // API Key 账号，通过静态密钥调用上游供应商。
+    OAuth,          // OAuth 账号，通过 OAuth 授权令牌调用上游供应商。
+    Session,        // 会话账号，通过临时会话凭据或会话态调用上游服务。
+    LocalEndpoint   // 本地端点，不依赖远程供应商账号，通常调用本机或内网模型服务。
 };
 
 /**
  * @brief 上游账号当前运行状态。
  */
 enum class UpstreamStatus {
-    Available,
-    Disabled,
-    RateLimited,
-    Exhausted,
-    Unhealthy,
-    CoolingDown,
-    Unknown
+    Available,    // 上游账号可用，可以参与路由和请求调用。
+    Disabled,     // 上游账号被人工禁用，不应参与路由。
+    RateLimited,  // 上游账号触发供应商或本地限流，短时间内不应继续调用。
+    Exhausted,    // 上游账号额度、预算或配额已用尽。
+    Unhealthy,    // 健康检查失败或近期失败率过高，不适合继续路由。
+    CoolingDown,  // 上游账号处于冷却期，通常用于失败后临时暂停调用。
+    Unknown       // 状态未知，通常表示尚未完成健康检查或状态未初始化。
 };
 
 /**

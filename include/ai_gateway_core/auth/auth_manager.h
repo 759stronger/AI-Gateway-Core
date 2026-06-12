@@ -13,10 +13,13 @@
 #pragma once
 
 #include "ai_gateway_core/core/result.h"
-#include <string>
 #include <ctime>
+#include <memory>
+#include <string>
 
 namespace ai_gateway_core {
+
+class Storage;
 
 /**
  * @brief API Key 对应的内部身份信息。
@@ -34,6 +37,8 @@ struct ApiKeyIdentity {
     std::string name;
     bool enabled = false;
     std::time_t expires_at = 0;
+    std::time_t created_at = 0;
+    std::time_t last_used_at = 0;
 };
 
 /**
@@ -71,6 +76,88 @@ public:
      * @return 成功时表示使用痕迹已记录；失败时返回存储错误。
      */
     virtual Status touchApiKey(const std::string& api_key_id) = 0;
+};
+
+/**
+ * @brief AuthManager 的默认实现。
+ *
+ * 设计意图：
+ * - 这一层只处理认证规则，不负责底层存储细节。
+ * - Bearer 头解析、API Key 生成、哈希和状态校验都放在这里。
+ * - 实际的数据读写委托给 Storage，便于以后替换为数据库实现。
+ */
+class DefaultAuthManager : public AuthManager {
+public:
+    /**
+     * @brief 创建一个默认认证管理器。
+     * @param storage 用于查询和更新 API Key 数据的存储实现。
+     */
+    explicit DefaultAuthManager(std::shared_ptr<Storage> storage);
+
+    /**
+     * @brief 认证 Bearer Token 并返回内部身份。
+     * @param authorization_header HTTP Authorization 请求头。
+     * @return 成功时返回对应的 ApiKeyIdentity；失败时返回鉴权错误。
+     */
+    Result<ApiKeyIdentity> authenticateBearerToken(const std::string& authorization_header) override;
+
+    /**
+     * @brief 为某个用户创建一把新的 API Key。
+     * @param user_id API Key 归属的用户标识。
+     * @param name 这把 API Key 的用途说明或展示名称。
+     * @return 成功时返回一次性的明文 API Key。
+     */
+    Result<std::string> createApiKey(const std::string& user_id, const std::string& name) override;
+
+    /**
+     * @brief 撤销指定 API Key。
+     * @param api_key_id 需要撤销的 API Key 内部标识。
+     * @return 成功时表示撤销完成；失败时返回不存在或存储错误。
+     */
+    Status revokeApiKey(const std::string& api_key_id) override;
+
+    /**
+     * @brief 更新 API Key 的最近使用时间。
+     * @param api_key_id 已使用的 API Key 内部标识。
+     * @return 成功时表示更新完成；失败时返回不存在或存储错误。
+     */
+    Status touchApiKey(const std::string& api_key_id) override;
+
+private:
+    /**
+     * @brief 从 Authorization 头中提取 Bearer Token。
+     * @param authorization_header 原始请求头内容。
+     * @return 成功时返回明文 token；失败时返回参数或未认证错误。
+     */
+    Result<std::string> parseBearerToken(const std::string& authorization_header) const;
+
+    /**
+     * @brief 计算 API Key 的稳定哈希值。
+     * @param api_key 明文 API Key。
+     * @return 可用于存储和查找的哈希字符串。
+     */
+    std::string hashApiKey(const std::string& api_key) const;
+
+    /**
+     * @brief 生成新的 API Key 内部标识。
+     * @return 新的 api_key_id。
+     */
+    std::string generateApiKeyId() const;
+
+    /**
+     * @brief 生成返回给用户的一次性明文 API Key。
+     * @return 可直接复制使用的明文密钥。
+     */
+    std::string generatePlaintextApiKey() const;
+
+    /**
+     * @brief 获取当前时间戳。
+     * @return 当前时间对应的 std::time_t。
+     */
+    std::time_t now() const;
+
+    /// @brief 用于读取和持久化 API Key 数据的存储实现。
+    std::shared_ptr<Storage> storage_;
 };
 
 }

@@ -20,10 +20,14 @@
 #include "ai_gateway_core/routing/model_mapping.h"
 #include "ai_gateway_core/upstream/upstream_account.h"
 #include "ai_gateway_core/usage/usage_recorder.h"
+#include <memory>
 #include <string>
 #include <vector>
 
 namespace ai_gateway_core {
+
+class Storage;
+class UpstreamPool;
 
 /**
  * @brief 管理后台接口。
@@ -90,6 +94,57 @@ public:
      * @return 成功时返回用量记录列表；失败时返回存储错误。
      */
     virtual Result<std::vector<UsageRecord>> listUsageRecords() = 0;
+};
+
+/**
+ * @brief 默认管理后台接口实现。
+ *
+ * 设计意图：
+ * - 把管理端常见操作统一封装成一组高层接口。
+ * - 上层不必分别拼接 storage、health_checker 和 usage_recorder 的调用。
+ */
+class BasicAdminAPI : public AdminAPI {
+public:
+    /**
+     * @brief 创建默认管理后台接口实现。
+     * @param storage 用于读取模型映射等基础配置。
+     * @param upstream_pool 用于管理上游账号。
+     * @param health_checker 用于查询通道健康状态。
+     * @param usage_recorder 用于查询用量审计记录。
+     */
+    BasicAdminAPI(std::shared_ptr<Storage> storage,
+                  std::shared_ptr<UpstreamPool> upstream_pool,
+                  std::shared_ptr<HealthChecker> health_checker,
+                  std::shared_ptr<UsageRecorder> usage_recorder);
+
+    /// @brief 列出所有上游账号。
+    Result<std::vector<UpstreamAccount>> listUpstreams() override;
+    /// @brief 创建新的上游账号。
+    Status createUpstream(const UpstreamAccount& account) override;
+    /// @brief 更新已有上游账号。
+    Status updateUpstream(const UpstreamAccount& account) override;
+    /// @brief 删除指定上游账号。
+    Status deleteUpstream(const std::string& account_id) override;
+    /// @brief 列出所有模型映射。
+    Result<std::vector<ModelMapping>> listModelMappings() override;
+    /// @brief 创建新的模型映射。
+    Status createModelMapping(const ModelMapping& mapping) override;
+    /// @brief 更新已有模型映射。
+    Status updateModelMapping(const ModelMapping& mapping) override;
+    /// @brief 列出所有通道健康状态。
+    Result<std::vector<HealthSnapshot>> listChannelStatus() override;
+    /// @brief 列出所有用量审计记录。
+    Result<std::vector<UsageRecord>> listUsageRecords() override;
+
+private:
+    /// @brief 基础配置与数据访问依赖。
+    std::shared_ptr<Storage> storage_;
+    /// @brief 上游账号池依赖。
+    std::shared_ptr<UpstreamPool> upstream_pool_;
+    /// @brief 健康检查依赖。
+    std::shared_ptr<HealthChecker> health_checker_;
+    /// @brief 用量记录依赖。
+    std::shared_ptr<UsageRecorder> usage_recorder_;
 };
 
 }

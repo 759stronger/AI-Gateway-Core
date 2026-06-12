@@ -16,8 +16,13 @@
 #include "ai_gateway_core/core/result.h"
 #include "ai_gateway_core/core/types.h"
 #include "ai_gateway_core/routing/model_mapping.h"
+#include <memory>
+#include <string>
+#include <unordered_map>
 
 namespace ai_gateway_core {
+
+class UserManager;
 
 /**
  * @brief 计费预检查结果。
@@ -29,6 +34,20 @@ namespace ai_gateway_core {
 struct BillingDecision {
     bool allowed = false;
     double estimated_cost = 0.0;
+};
+
+/**
+ * @brief 单个模型的基础价格配置。
+ *
+ * 字段说明：
+ * - prompt_price_per_1k_tokens：每 1000 个输入 token 的价格。
+ * - completion_price_per_1k_tokens：每 1000 个输出 token 的价格。
+ * - request_base_price：每次请求的固定基础成本。
+ */
+struct ModelPricing {
+    double prompt_price_per_1k_tokens = 0.0;
+    double completion_price_per_1k_tokens = 0.0;
+    double request_base_price = 0.0;
 };
 
 /**
@@ -62,6 +81,47 @@ public:
      * @return 成功时表示成本已提交；失败时返回余额不足、并发冲突或存储错误。
      */
     virtual Status commitCost(const GatewayContext& context, double cost) = 0;
+};
+
+/**
+ * @brief 一个简单、清晰的默认计费策略实现。
+ *
+ * 设计意图：
+ * - 先根据基础费率和映射倍率完成一套可运行的计费逻辑。
+ * - 让你在不引入复杂账单系统的前提下，先把“预检查 -> 计算 -> 扣费”主链路走通。
+ */
+class SimpleBillingPolicy : public BillingPolicy {
+public:
+    /**
+     * @brief 创建默认计费策略。
+     * @param user_manager 用于最终执行扣费或额度扣减的用户管理器。
+     */
+    explicit SimpleBillingPolicy(std::shared_ptr<UserManager> user_manager);
+
+    /// @brief 在请求执行前判断是否允许继续调用。
+    Result<BillingDecision> preCheck(const GatewayContext& context, const ModelMapping& mapping) override;
+    /// @brief 根据实际 token 用量计算最终成本。
+    Result<double> calculateCost(const GatewayContext& context,
+                                 const ModelMapping& mapping,
+                                 const TokenUsage& usage) override;
+    /// @brief 将成本提交给用户账户系统。
+    Status commitCost(const GatewayContext& context, double cost) override;
+
+    /// @brief 设置没有模型专属配置时使用的默认费率。
+    void setDefaultPricing(ModelPricing pricing);
+    /// @brief 为某个公共模型设置专属费率。
+    void setModelPricing(const std::string& public_model_name, ModelPricing pricing);
+
+private:
+    /// @brief 解析某个公共模型最终应使用的费率配置。
+    ModelPricing resolvePricing(const std::string& public_model_name) const;
+
+    /// @brief 负责执行最终扣费的用户管理器。
+    std::shared_ptr<UserManager> user_manager_;
+    /// @brief 默认费率。
+    ModelPricing default_pricing_;
+    /// @brief 模型专属费率表，key 为 public_model_name。
+    std::unordered_map<std::string, ModelPricing> model_pricing_;
 };
 
 }

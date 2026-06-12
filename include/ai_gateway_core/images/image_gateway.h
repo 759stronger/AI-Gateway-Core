@@ -16,10 +16,16 @@
 #include "ai_gateway_core/core/result.h"
 #include "ai_gateway_core/core/types.h"
 #include "ai_gateway_core/upstream/upstream_account.h"
+#include <memory>
 #include <string>
 #include <vector>
 
 namespace ai_gateway_core {
+
+class BillingPolicy;
+class ModelRouter;
+class RateLimiter;
+class UsageRecorder;
 
 /**
  * @brief 发送给图片供应商的图片生成请求。
@@ -81,6 +87,42 @@ public:
      * @return 成功时返回图片生成结果；失败时返回认证、路由、限流、计费或供应商错误。
      */
     virtual Result<ImageGenerationResponse> generate(const GatewayContext& context, const ImageGenerationRequest& request) = 0;
+};
+
+/**
+ * @brief 图片网关的基础实现声明。
+ *
+ * 设计意图：
+ * - 让图片能力复用认证、路由、限流、计费和用量记录链路。
+ * - 与聊天网关保持相似结构，降低后续维护成本。
+ */
+class BasicImageGateway : public ImageGateway {
+public:
+    /**
+     * @brief 创建基础图片网关。
+     * @param model_router 用于选择图片上游模型和账号。
+     * @param rate_limiter 用于图片请求限流。
+     * @param billing_policy 用于图片请求计费。
+     * @param usage_recorder 用于记录图片请求审计信息。
+     */
+    BasicImageGateway(std::shared_ptr<ModelRouter> model_router,
+                      std::shared_ptr<RateLimiter> rate_limiter,
+                      std::shared_ptr<BillingPolicy> billing_policy,
+                      std::shared_ptr<UsageRecorder> usage_recorder);
+
+    /// @brief 执行一次图片生成主链路。
+    Result<ImageGenerationResponse> generate(const GatewayContext& context,
+                                             const ImageGenerationRequest& request) override;
+
+private:
+    /// @brief 模型路由依赖。
+    std::shared_ptr<ModelRouter> model_router_;
+    /// @brief 限流依赖。
+    std::shared_ptr<RateLimiter> rate_limiter_;
+    /// @brief 计费依赖。
+    std::shared_ptr<BillingPolicy> billing_policy_;
+    /// @brief 用量记录依赖。
+    std::shared_ptr<UsageRecorder> usage_recorder_;
 };
 
 }

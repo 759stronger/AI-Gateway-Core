@@ -15,19 +15,23 @@
 
 #include "ai_gateway_core/core/result.h"
 #include "ai_gateway_core/core/types.h"
-#include <string>
 #include <ctime>
+#include <memory>
+#include <string>
+#include <vector>
 
 namespace ai_gateway_core {
+
+class Storage;
 
 /**
  * @brief 一次请求最终执行状态。
  */
 enum class RequestStatus {
-    Success,
-    Failed,
-    Partial,
-    Cancelled
+    Success,    // 请求完整成功，模型调用、计费和记录流程都正常完成。
+    Failed,     // 请求失败，没有产生可用的完整业务结果。
+    Partial,    // 请求部分成功，例如流式响应中途失败但已经返回部分内容。
+    Cancelled   // 请求被客户端、服务端或超时控制主动取消。
 };
 
 /**
@@ -88,6 +92,39 @@ public:
      * @return 成功时返回用量记录；失败时返回不存在或存储错误。
      */
     virtual Result<UsageRecord> getRecord(const std::string& record_id) = 0;
+
+    /**
+     * @brief 列出全部用量记录。
+     * @return 成功时返回完整记录列表；失败时返回存储错误。
+     */
+    virtual Result<std::vector<UsageRecord>> listRecords() = 0;
+};
+
+/**
+ * @brief UsageRecorder 的默认实现。
+ *
+ * 设计意图：
+ * - 把网关请求结束后的审计记录统一写入 Storage。
+ * - 让上层只负责组织 UsageRecord，不关心底层保存方式。
+ */
+class DefaultUsageRecorder : public UsageRecorder {
+public:
+    /**
+     * @brief 创建一个默认用量记录器。
+     * @param storage 用于保存和查询用量记录的存储实现。
+     */
+    explicit DefaultUsageRecorder(std::shared_ptr<Storage> storage);
+
+    /// @brief 保存一条用量记录。
+    Status recordUsage(const UsageRecord& record) override;
+    /// @brief 读取一条用量记录。
+    Result<UsageRecord> getRecord(const std::string& record_id) override;
+    /// @brief 列出全部用量记录。
+    Result<std::vector<UsageRecord>> listRecords() override;
+
+private:
+    /// @brief 底层存储实现。
+    std::shared_ptr<Storage> storage_;
 };
 
 }

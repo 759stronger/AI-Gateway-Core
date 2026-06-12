@@ -53,4 +53,50 @@ public:
     virtual GatewayConfig load() = 0;
 };
 
+/**
+ * @brief 返回一份固定配置的简单实现。
+ *
+ * 设计意图：
+ * - 适合测试、教学和手工构造配置场景。
+ * - 不依赖文件或环境变量，直接返回构造时给定的配置。
+ */
+class StaticConfigManager : public ConfigManager {
+public:
+    /**
+     * @brief 创建固定配置管理器。
+     * @param config 后续每次 load 都返回这份配置。
+     */
+    explicit StaticConfigManager(GatewayConfig config);
+
+    /// @brief 返回构造时保存的固定配置。
+    GatewayConfig load() override;
+
+private:
+    /// @brief 固定配置副本。
+    GatewayConfig config_;
+};
+
+/**
+ * @brief 从环境变量读取配置的实现。
+ *
+ * 设计意图：
+ * - 适合服务部署和命令行启动场景。
+ * - 让网关可以不改代码就切换端口、路径和功能开关。
+ */
+class EnvironmentConfigManager : public ConfigManager {
+public:
+    EnvironmentConfigManager() = default;
+
+    /// @brief 从环境变量装配并返回 GatewayConfig。
+    GatewayConfig load() override;
+
+private:
+    /// @brief 读取字符串环境变量，不存在时返回默认值。
+    std::string readEnv(const std::string& key, const std::string& default_value) const;
+    /// @brief 读取整型环境变量，不存在或非法时返回默认值。
+    int readEnvInt(const std::string& key, int default_value) const;
+    /// @brief 读取布尔环境变量，不存在或非法时返回默认值。
+    bool readEnvBool(const std::string& key, bool default_value) const;
+};
+
 }

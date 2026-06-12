@@ -14,10 +14,22 @@
 
 #include "ai_gateway_core/core/result.h"
 #include "ai_gateway_core/core/types.h"
-#include <string>
 #include <map>
+#include <memory>
+#include <string>
 
 namespace ai_gateway_core {
+
+class AuthManager;
+class BillingPolicy;
+class ModelRouter;
+class Observability;
+class OpenAIAdapter;
+class ProviderManager;
+class RateLimiter;
+class UsageRecorder;
+class UserManager;
+class UpstreamPool;
 
 /**
  * @brief 网关服务启动配置。
@@ -33,6 +45,34 @@ struct GatewayServerOptions {
     int port = 8080;
     bool enable_admin_api = true;
     bool enable_playground = true;
+};
+
+/**
+ * @brief 网关服务运行所需的核心依赖集合。
+ *
+ * 字段说明：
+ * - openai_adapter：协议解析与响应构建。
+ * - auth_manager：下游 API Key 鉴权。
+ * - user_manager：用户状态和额度校验。
+ * - rate_limiter：请求限流。
+ * - model_router：模型映射与上游选择。
+ * - provider_manager：Provider 注册表。
+ * - usage_recorder：请求用量记录。
+ * - billing_policy：请求计费策略。
+ * - observability：链路追踪和事件记录。
+ * - upstream_pool：上游账号池，供并发控制和状态回写使用。
+ */
+struct GatewayDependencies {
+    std::shared_ptr<OpenAIAdapter> openai_adapter;
+    std::shared_ptr<AuthManager> auth_manager;
+    std::shared_ptr<UserManager> user_manager;
+    std::shared_ptr<RateLimiter> rate_limiter;
+    std::shared_ptr<ModelRouter> model_router;
+    std::shared_ptr<ProviderManager> provider_manager;
+    std::shared_ptr<UsageRecorder> usage_recorder;
+    std::shared_ptr<BillingPolicy> billing_policy;
+    std::shared_ptr<Observability> observability;
+    std::shared_ptr<UpstreamPool> upstream_pool;
 };
 
 /**
@@ -65,6 +105,53 @@ public:
      * @return 运行中返回 true，否则返回 false。
      */
     virtual bool isRunning() const = 0;
+};
+
+/**
+ * @brief GatewayServer 的默认实现声明。
+ *
+ * 设计意图：
+ * - 统一承载“初始化 -> 启动 -> 请求处理 -> 停止”这条服务生命周期。
+ * - 通过依赖注入把各个模块串成完整请求链路。
+ */
+class DefaultGatewayServer : public GatewayServer {
+public:
+    /**
+     * @brief 创建默认网关服务。
+     * @param dependencies 网关运行所需的依赖集合。
+     */
+    explicit DefaultGatewayServer(GatewayDependencies dependencies);
+
+    /// @brief 使用监听配置和开关完成服务初始化。
+    Status initialize(const GatewayServerOptions& options) override;
+    /// @brief 启动服务。
+    Status start() override;
+    /// @brief 停止服务。
+    void stop() override;
+    /// @brief 查询当前服务是否处于运行状态。
+    bool isRunning() const override;
+
+    /**
+     * @brief 处理一次聊天补全请求。
+     * @param authorization_header 客户端 Authorization 请求头。
+     * @param request_body 原始聊天补全请求体。
+     * @return 成功时返回 OpenAI 兼容响应字符串；失败时返回协议或业务错误。
+     */
+    Result<std::string> handleChatCompletion(const std::string& authorization_header,
+                                             const std::string& request_body);
+
+private:
+    /// @brief 检查启动前依赖是否齐全且可用。
+    Status validateDependencies() const;
+
+    /// @brief 网关依赖集合。
+    GatewayDependencies dependencies_;
+    /// @brief 当前服务选项。
+    GatewayServerOptions options_;
+    /// @brief 服务是否已经完成 initialize。
+    bool initialized_ = false;
+    /// @brief 服务当前是否处于运行状态。
+    bool running_ = false;
 };
 
 }

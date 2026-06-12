@@ -13,8 +13,10 @@
 #pragma once
 
 #include "ai_gateway_core/core/types.h"
-#include <string>
 #include <map>
+#include <mutex>
+#include <string>
+#include <vector>
 
 namespace ai_gateway_core {
 
@@ -70,6 +72,44 @@ public:
      * @param latency_ms 从请求开始到结束的端到端延迟毫秒数。
      */
     virtual void recordRequestEnd(const GatewayContext& context, int latency_ms) = 0;
+};
+
+/**
+ * @brief 一个基础的内存版可观测性实现。
+ *
+ * 设计意图：
+ * - 先把 trace_id 生成和关键事件记录能力接起来。
+ * - 方便调试、教学和后续接日志系统。
+ */
+class BasicObservability : public Observability {
+public:
+    /// @brief 生成新的 trace_id。
+    std::string createTraceId() override;
+    /// @brief 记录请求开始事件。
+    void recordRequestStart(const GatewayContext& context) override;
+    /// @brief 记录路由决策事件。
+    void recordRouteDecision(const GatewayContext& context, const std::string& upstream_account_id) override;
+    /// @brief 记录降级切换事件。
+    void recordFallback(const GatewayContext& context,
+                        const std::string& from_account_id,
+                        const std::string& to_account_id) override;
+    /// @brief 记录请求结束事件。
+    void recordRequestEnd(const GatewayContext& context, int latency_ms) override;
+
+    /**
+     * @brief 读取当前内存中的全部追踪记录。
+     * @return trace 记录列表的只读引用。
+     */
+    const std::vector<TraceScope>& traces() const;
+
+private:
+    /// @brief 将一条 trace 事件追加到内存列表。
+    void appendTrace(const TraceScope& scope);
+
+    /// @brief 已记录的 trace 事件列表。
+    std::vector<TraceScope> traces_;
+    /// @brief 保护 traces_ 的互斥锁。
+    mutable std::mutex mutex_;
 };
 
 }

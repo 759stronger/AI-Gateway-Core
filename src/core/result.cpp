@@ -1,16 +1,59 @@
 /**
  * @file result.cpp
- * @brief 统一结果类型相关实现预留源文件。
+ * @brief 实现统一结果类型的非模板辅助函数。
  *
- * 后续实现方向：
- * - 可在此添加 ErrorCode 到字符串的转换函数。
- * - 可在此添加构造成功 Result、失败 Result 和 Status 的辅助函数。
- * - 保持所有模块对错误码和错误信息的表达一致。
- *
- * 当前文件只建立编译单元和模块边界，不提供默认实现，避免改变现有头文件接口。
+ * 本文件负责实现 ErrorCode 到字符串的转换，以及 Status 成功/失败结果构造函数。
+ * Result<T> 是模板类型，相关构造辅助函数必须放在 result.h 中，才能让调用方在编译期实例化。
  */
 #include "ai_gateway_core/core/result.h"
 
+#include <utility>
+
 namespace ai_gateway_core {
+
+const char* toString(ErrorCode code) {
+    switch (code) {
+    case ErrorCode::Ok:
+        return "Ok";
+    case ErrorCode::InvalidArgument:
+        return "InvalidArgument";
+    case ErrorCode::Unauthorized:
+        return "Unauthorized";
+    case ErrorCode::Forbidden:
+        return "Forbidden";
+    case ErrorCode::QuotaExceeded:
+        return "QuotaExceeded";
+    case ErrorCode::RateLimited:
+        return "RateLimited";
+    case ErrorCode::NotFound:
+        return "NotFound";
+    case ErrorCode::NotInitialized:
+        return "NotInitialized";
+    case ErrorCode::ProviderUnavailable:
+        return "ProviderUnavailable";
+    case ErrorCode::UpstreamUnavailable:
+        return "UpstreamUnavailable";
+    case ErrorCode::NetworkError:
+        return "NetworkError";
+    case ErrorCode::Timeout:
+        return "Timeout";
+    case ErrorCode::ResponseParseError:
+        return "ResponseParseError";
+    case ErrorCode::StorageError:
+        return "StorageError";
+    case ErrorCode::InternalError:
+        return "InternalError";
+    }
+
+    return "InternalError";
+}
+
+Status successStatus() {
+    return {true, {ErrorCode::Ok, {}}};
+}
+
+Status failureStatus(Error error) {
+    return {false, std::move(error)};
+}
 
 }
